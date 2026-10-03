@@ -1,7 +1,7 @@
 /**
  * Early-runner score for Pump.fun bonding-curve coins.
- * Alerts only while the curve is still filling and market cap is under $25k.
- * A vertical chart or a near-graduated coin is already late.
+ * (Temporarily loosened for testing so some results appear.)
+ * Original was very strict: under $25k, fast fill, very early curve.
  */
 
 export type RunnerStatus = 'alert' | 'watch' | 'late' | 'stalled';
@@ -74,29 +74,30 @@ export function scoreRunner(coin: PumpCoinRaw, now = Date.now()): RunnerHit | nu
     fillPerMin: Math.round(fillPerMin * 10) / 10,
   };
 
-  if (ageMin > 180 && curvePct < 80) {
-    return { ...base, status: 'stalled', reason: 'Curve has been sitting. Not a fresh run.' };
+  if (ageMin > 400 && curvePct < 60) {
+    return { ...base, status: 'stalled', reason: 'Curve has been sitting a long time. Not a fresh run.' };
   }
-  if (mc > 40000 || curvePct >= 85) {
-    return { ...base, status: 'late', reason: 'Already up the curve. This is the chase, not the find.' };
+  if (mc > 100000 || curvePct >= 92) {
+    return { ...base, status: 'late', reason: 'Already up the curve (loosened test limit).' };
   }
-  if (held < 0.55 && ath > mc * 1.5) {
-    return { ...base, status: 'late', reason: 'Already dumped off its high.' };
+  if (held < 0.4 && ath > mc * 2) {
+    return { ...base, status: 'late', reason: 'Already dumped hard off its high.' };
   }
 
-  if (mc >= 4000 && mc <= 25000 && ageMin <= 45 && curvePct >= 12 && curvePct <= 65 && fillPerMin >= 0.8) {
+  // Loosened test thresholds (original was much stricter)
+  if (mc >= 1000 && mc <= 75000 && ageMin <= 120 && curvePct >= 5 && curvePct <= 80 && fillPerMin >= 0.3) {
     return {
       ...base,
       status: 'alert',
-      reason: 'Curve filling fast, still under $25k, before graduation.',
+      reason: 'Curve filling, still early (loosened test: under ~$75k).',
     };
   }
 
-  if (mc < 40000 && ageMin <= 90 && curvePct >= 8 && curvePct <= 80 && fillPerMin >= 0.35) {
+  if (mc < 100000 && ageMin <= 300 && curvePct >= 3 && curvePct <= 90 && fillPerMin >= 0.15) {
     return {
       ...base,
       status: 'watch',
-      reason: 'Early curve, not fast enough yet for an alert.',
+      reason: 'Early-ish curve (loosened test limits).',
     };
   }
 

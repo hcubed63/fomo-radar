@@ -35,7 +35,7 @@ export async function GET() {
 
     return NextResponse.json({
       tokens: ranked,
-      note: 'Alert means the curve is filling and market cap is still under $25k. It is not a buy signal.',
+      note: 'Alert means the curve is filling (test mode: loosened limits). It is not a buy signal.',
     });
   } catch (e) {
     console.error('Runner fetch failed', e);
