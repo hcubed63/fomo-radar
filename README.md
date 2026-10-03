@@ -15,6 +15,25 @@ See `SUMMARY.md` for a complete record of what was built in this session.
 
 Source code and issues: https://github.com/hcubed63/fomo-radar
 
+## Editing from Mobile / Phone
+
+The easiest way to make changes while chatting with Grok on your phone:
+
+1. Describe the change here in the chat (or paste a screenshot of the current code/screen).
+2. I will give you the exact updated code or a precise diff.
+3. On your phone, open Safari and go to this repo.
+4. Navigate to the file → tap the pencil icon (edit) → replace the relevant section.
+5. Commit with a clear message.
+
+**Even better editing experience:**
+- On the repo page in Safari, tap the `.` key on your keyboard (or visit https://github.dev/hcubed63/fomo-radar). This opens a VS Code editor right in the browser.
+- Make changes, then commit directly.
+
+**Full dev environment:**
+- From the repo page, create a GitHub Codespace (under the Code button). You can then open and edit in the browser with a real terminal and dev server.
+
+Once the Vercel project is connected to this GitHub repo, any commit you make from your phone will automatically trigger a production deploy.
+
 ---
 
 ## Getting Started (Local)
