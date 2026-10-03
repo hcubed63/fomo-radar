@@ -1,5 +1,8 @@
 # FOMO Radar + Recommended Stack: Simple Instructional Guide
 
+**Source:** https://github.com/hcubed63/fomo-radar  
+**Live Demo:** https://fomo-radar-blond.vercel.app
+
 **Goal**: Find Solana memecoins where smart money / KOL attention is arriving *early*, analyze them quickly with real data, cross-check with multiple free sources, and only act when signals align. All without paying for expensive APIs.
 
 This follows the stack recommended by @goatyishere: Start with FOMO (fomo.family), then use RH Trenches, FOMO Pulse, Stalkchain, Hoodwatch, and the FOMO Tracking Bot for edge.
@@ -40,7 +43,9 @@ Open these tabs:
 - FOMO Pulse: https://fomopulse.app
 - Hoodwatch: https://www.hoodwatch.io
 
-**Why**: Easy switching between discovery and analysis.
+**Source code:** https://github.com/hcubed63/fomo-radar
+
+**Why**: Easy switching between discovery and analysis. The full source (including the Hot list and all companion links) is on GitHub.
 
 ### Step 2: Find Candidates (Discovery)
 In Radar, click the green **"Hot Low-Cap (Pump.fun)"** button.

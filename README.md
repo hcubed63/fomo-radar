@@ -1,14 +1,23 @@
-This is **FOMO Radar** — a Solana momentum intelligence dashboard built to the detailed product spec.
+# FOMO Radar
+
+**GitHub:** https://github.com/hcubed63/fomo-radar  
+**Live Demo:** https://fomo-radar-blond.vercel.app (latest Vercel alias)
+
+This is a Solana momentum intelligence dashboard built to the detailed product spec.
 
 - Dual scores (FOMO Opportunity 0-100 + Exit Risk 0-100)
 - 5 stages + sequence detection
 - 7 radar cards with acceleration + historical comparisons
 - Event timeline + AI-style assessment
-- Live DexScreener + RugCheck analysis + full spec-matching demo
+- Live DexScreener + free Pump.fun social + full spec-matching demo
 
 See `SUMMARY.md` for a complete record of what was built in this session.
 
-## Getting Started
+Source code and issues: https://github.com/hcubed63/fomo-radar
+
+---
+
+## Getting Started (Local)
 
 First, run the development server:
 
@@ -39,9 +48,14 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Now that the source is on GitHub (https://github.com/hcubed63/fomo-radar), the recommended way is:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Connect your Vercel project to the GitHub repo for automatic deploys on push.
+2. Or continue using `vercel --prod` from the CLI.
+
+The easiest way to deploy is via the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) (GitHub import recommended).
+
+Check out the [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
 ## Real-time Social Radar (optional but recommended)
 
