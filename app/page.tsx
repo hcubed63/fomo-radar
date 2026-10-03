@@ -61,6 +61,8 @@ export default function FOMORadar() {
   // Hot low-cap Pump.fun tokens (for the "button that shows them")
   const [hotTokens, setHotTokens] = useState<any[]>([]);
   const [hotLoading, setHotLoading] = useState(false);
+  const [runners, setRunners] = useState<any[]>([]);
+  const [runnersLoading, setRunnersLoading] = useState(false);
 
   // Load watchlist mints from localStorage and re-analyze on mount
   useEffect(() => {
@@ -248,6 +250,22 @@ export default function FOMORadar() {
     }
   };
 
+  const loadRunners = async () => {
+    setRunnersLoading(true);
+    try {
+      const res = await fetch('/api/runners');
+      const data = await res.json();
+      setRunners(data.tokens || []);
+      if (!data.tokens || data.tokens.length === 0) {
+        toast.info('No early runners right now. The curve is quiet.');
+      }
+    } catch {
+      toast.error('Could not load early runners');
+    } finally {
+      setRunnersLoading(false);
+    }
+  };
+
   // Watchlist helpers
   const addToWatchlist = async (targetMint?: string) => {
     const target = targetMint || mint;
@@ -387,6 +405,13 @@ export default function FOMORadar() {
             >
               {hotLoading ? 'Loading...' : 'Hot Low-Cap (Pump.fun)'}
             </button>
+            <button
+              onClick={loadRunners}
+              disabled={runnersLoading}
+              className="text-xs px-3 py-1 rounded bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20 text-[#f59e0b] border border-[#f59e0b]/30"
+            >
+              {runnersLoading ? 'Loading...' : 'Early Runners'}
+            </button>
             <span className="hidden sm:inline text-[9px] sm:text-[10px] text-[#5c586c] self-center ml-1">Auto-loaded example on open. Full example uses the exact assessment text from the spec. Real data = live DexScreener + RugCheck.</span>
           </div>
         </div>
@@ -420,6 +445,41 @@ export default function FOMORadar() {
               ))}
             </div>
             <div className="text-[10px] text-[#5c586c] mt-1">Click to load + analyze. Use with the strategy: after analyzing, use the links (Stalkchain now goes straight to the KOL feed).</div>
+          </div>
+        )}
+
+        {runners.length > 0 && (
+          <div className="mb-6">
+            <div className="text-sm font-medium tracking-[0.5px] text-[#8b879c] mb-2 flex items-center gap-2">
+              EARLY RUNNERS — curve still filling, under $25k
+              <button onClick={loadRunners} className="text-[10px] text-[#5c586c] hover:text-white">↻ refresh</button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {runners.map((t: any) => (
+                <div key={t.mint} className="card p-3 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-semibold">{t.symbol}</div>
+                      <div className="text-[#8b879c] text-[10px]">${(t.marketCap / 1000).toFixed(1)}k · {t.ageMin}m old · curve {t.curvePct}%</div>
+                    </div>
+                    <span className={t.status === 'alert' ? 'pill-green' : 'pill-amber'}>
+                      {t.status === 'alert' ? 'ALERT' : 'WATCH'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-[#8b879c] mt-1">{t.reason} Fill {t.fillPerMin}/min.</div>
+                  <button
+                    onClick={() => {
+                      setMint(t.mint);
+                      analyze(t.mint);
+                    }}
+                    className="mt-2 w-full text-[10px] px-2 py-1 rounded bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20 text-[#f59e0b]"
+                  >
+                    Analyze in Radar
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="text-[10px] text-[#5c586c] mt-1">Alert is before the vertical move. It is not a buy. A coin already at the top of the chart will not appear here.</div>
           </div>
         )}
 
