@@ -457,7 +457,7 @@ export default function FOMORadar() {
         {(runners.length > 0 || runnersLoading) && (
           <div className="mb-6">
             <div className="text-sm font-medium tracking-[0.5px] text-[#8b879c] mb-2 flex items-center gap-2">
-              EARLY RUNNERS — refreshes every 20s
+              EARLY RUNNERS — refreshes every 20s (loosened test)
               <button onClick={loadRunners} className="text-[10px] text-[#5c586c] hover:text-white">↻ refresh</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">

@@ -79,7 +79,7 @@ export async function GET() {
 
     return NextResponse.json({
       tokens: checked,
-      note: 'Alert needs a filling curve under $25k and a live pool that is not already falling. It is not a buy signal.',
+      note: 'Alert needs a filling curve (loosened test limits). It is not a buy signal.',
     });
   } catch (e) {
     console.error('Runner fetch failed', e);

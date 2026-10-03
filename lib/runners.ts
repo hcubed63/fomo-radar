@@ -78,32 +78,30 @@ export function scoreRunner(coin: PumpCoinRaw, now = Date.now()): RunnerHit | nu
   if (ageMin < 4) return null;
   if (ageMin < 8 && fillPerMin > 8) return null;
 
-  if (held < 0.7 && ath > mc * 1.25) {
+  if (held < 0.6 && ath > mc * 1.5) {
     return { ...base, status: 'late', reason: 'Already off its high. Launch spike, not a hold.' };
   }
-  if (ageMin > 180 && curvePct < 80) {
+  if (ageMin > 300 && curvePct < 70) {
     return { ...base, status: 'stalled', reason: 'Curve has been sitting. Not a fresh run.' };
   }
-  if (mc > 40000 || curvePct >= 85) {
-    return { ...base, status: 'late', reason: 'Already up the curve. This is the chase, not the find.' };
-  }
-  if (held < 0.55 && ath > mc * 1.5) {
-    return { ...base, status: 'late', reason: 'Already dumped off its high.' };
+  if (mc > 80000 || curvePct >= 90) {
+    return { ...base, status: 'late', reason: 'Already up the curve (loosened for test).' };
   }
 
-  if (mc >= 4000 && mc <= 25000 && ageMin <= 45 && curvePct >= 12 && curvePct <= 65 && fillPerMin >= 0.8) {
+  // Loosened for testing (original was stricter: 4-25k, fast fill, very early)
+  if (mc >= 1000 && mc <= 65000 && ageMin <= 100 && curvePct >= 5 && curvePct <= 78 && fillPerMin >= 0.35) {
     return {
       ...base,
       status: 'alert',
-      reason: 'Curve filling fast, still under $25k, before graduation.',
+      reason: 'Curve filling fast, still early (test ~$65k).',
     };
   }
 
-  if (mc < 40000 && ageMin <= 90 && curvePct >= 8 && curvePct <= 80 && fillPerMin >= 0.35) {
+  if (mc < 90000 && ageMin <= 240 && curvePct >= 4 && curvePct <= 85 && fillPerMin >= 0.2) {
     return {
       ...base,
       status: 'watch',
-      reason: 'Early curve, not fast enough yet for an alert.',
+      reason: 'Early curve (loosened test).',
     };
   }
 
