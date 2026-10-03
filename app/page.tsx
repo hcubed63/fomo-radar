@@ -473,15 +473,25 @@ export default function FOMORadar() {
                     </span>
                   </div>
                   <div className="text-[10px] text-[#8b879c] mt-1">{t.reason} Fill {t.fillPerMin}/min.</div>
-                  <button
-                    onClick={() => {
-                      setMint(t.mint);
-                      analyze(t.mint);
-                    }}
-                    className="mt-2 w-full text-[10px] px-2 py-1 rounded bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20 text-[#f59e0b]"
-                  >
-                    Analyze in Radar
-                  </button>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => {
+                        setMint(t.mint);
+                        analyze(t.mint);
+                      }}
+                      className="flex-1 text-[10px] px-2 py-1 rounded bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20 text-[#f59e0b]"
+                    >
+                      Analyze in Radar
+                    </button>
+                    <a
+                      href={`https://fomo.family/tokens/solana/${t.mint}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 text-center text-[10px] px-2 py-1 rounded bg-[#22c55e]/15 text-[#22c55e]"
+                    >
+                      Open in Fomo
+                    </a>
+                  </div>
                 </div>
               ))}
             </div>
