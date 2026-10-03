@@ -74,6 +74,13 @@ export function scoreRunner(coin: PumpCoinRaw, now = Date.now()): RunnerHit | nu
     fillPerMin: Math.round(fillPerMin * 10) / 10,
   };
 
+  // First minutes are the creator and snipers. FLOOF filled at 37/min at age 1, then dumped 57%.
+  if (ageMin < 4) return null;
+  if (ageMin < 8 && fillPerMin > 8) return null;
+
+  if (held < 0.7 && ath > mc * 1.25) {
+    return { ...base, status: 'late', reason: 'Already off its high. Launch spike, not a hold.' };
+  }
   if (ageMin > 180 && curvePct < 80) {
     return { ...base, status: 'stalled', reason: 'Curve has been sitting. Not a fresh run.' };
   }
