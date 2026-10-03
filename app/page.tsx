@@ -250,21 +250,27 @@ export default function FOMORadar() {
     }
   };
 
-  const loadRunners = async () => {
-    setRunnersLoading(true);
+  const loadRunners = async (silent = false) => {
+    if (!silent) setRunnersLoading(true);
     try {
       const res = await fetch('/api/runners');
       const data = await res.json();
       setRunners(data.tokens || []);
-      if (!data.tokens || data.tokens.length === 0) {
+      if (!silent && (!data.tokens || data.tokens.length === 0)) {
         toast.info('No early runners right now. The curve is quiet.');
       }
     } catch {
-      toast.error('Could not load early runners');
+      if (!silent) toast.error('Could not load early runners');
     } finally {
-      setRunnersLoading(false);
+      if (!silent) setRunnersLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadRunners(true);
+    const timer = setInterval(() => loadRunners(true), 20000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Watchlist helpers
   const addToWatchlist = async (targetMint?: string) => {
@@ -448,10 +454,10 @@ export default function FOMORadar() {
           </div>
         )}
 
-        {runners.length > 0 && (
+        {(runners.length > 0 || runnersLoading) && (
           <div className="mb-6">
             <div className="text-sm font-medium tracking-[0.5px] text-[#8b879c] mb-2 flex items-center gap-2">
-              EARLY RUNNERS — curve still filling (loosened test limits)
+              EARLY RUNNERS — refreshes every 20s
               <button onClick={loadRunners} className="text-[10px] text-[#5c586c] hover:text-white">↻ refresh</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -467,15 +473,25 @@ export default function FOMORadar() {
                     </span>
                   </div>
                   <div className="text-[10px] text-[#8b879c] mt-1">{t.reason} Fill {t.fillPerMin}/min.</div>
-                  <button
-                    onClick={() => {
-                      setMint(t.mint);
-                      analyze(t.mint);
-                    }}
-                    className="mt-2 w-full text-[10px] px-2 py-1 rounded bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20 text-[#f59e0b]"
-                  >
-                    Analyze in Radar
-                  </button>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => {
+                        setMint(t.mint);
+                        analyze(t.mint);
+                      }}
+                      className="flex-1 text-[10px] px-2 py-1 rounded bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20 text-[#f59e0b]"
+                    >
+                      Analyze in Radar
+                    </button>
+                    <a
+                      href={`https://fomo.family/tokens/solana/${t.mint}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 text-center text-[10px] px-2 py-1 rounded bg-[#22c55e]/15 text-[#22c55e]"
+                    >
+                      Open in Fomo
+                    </a>
+                  </div>
                 </div>
               ))}
             </div>
