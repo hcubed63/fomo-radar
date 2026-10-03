@@ -1,26 +1,167 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Premium dark trading theme */
+  --bg: #0a0a0f;
+  --bg-elevated: #111113;
+  --card: #16161b;
+  --card-hover: #1f1f25;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --text: #f4f2ff;
+  --muted: #8b879c;
+  --dim: #5c586c;
+
+  --green: #22c55e;
+  --green-dim: rgba(34, 197, 94, 0.15);
+  --red: #ef4444;
+  --red-dim: rgba(239, 68, 68, 0.15);
+  --blue: #6366f1;
+  --purple: #a78bfa;
+  --orange: #f59e0b;
+  --yellow: #eab308;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-geist-sans);
+  overflow-x: hidden;
+}
+
+html {
+  overflow-x: hidden;
+}
+
+.font-mono {
+  font-family: var(--font-geist-mono);
+}
+
+/* Trading UI polish */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.card:hover {
+  border-color: var(--border-strong);
+}
+
+.gauge {
+  transition: stroke-dashoffset 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.pill-green {
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.pill-red {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.pill-amber {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.radar-card {
+  padding: 14px;
+}
+@media (min-width: 640px) {
+  .radar-card {
+    padding: 16px;
+  }
+}
+
+/* Mobile polish for FOMO Radar */
+@media (max-width: 640px) {
+  input[placeholder] {
+    font-size: 14px;
+  }
+}
+
+.metric {
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-event {
+  position: relative;
+  padding-left: 28px;
+}
+
+.timeline-event::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: currentColor;
+  border: 2px solid var(--bg);
+}
+
+.timeline-line {
+  position: absolute;
+  left: 11px;
+  top: 20px;
+  bottom: -8px;
+  width: 2px;
+  background: var(--border);
+}
+
+/* Score gauges — single source of truth. SVG uses viewBox + 100% to scale. */
+.score-gauge {
+  position: relative;
+  width: 160px;
+  height: 160px;
+}
+
+.score-value {
+  font-size: 46px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mobile phones */
+@media (max-width: 640px) {
+  .score-gauge {
+    width: 132px;
+    height: 132px;
+  }
+  .score-value {
+    font-size: 38px;
+  }
+}
+
+/* Large desktop */
+@media (min-width: 1024px) {
+  .score-gauge {
+    width: 192px;
+    height: 192px;
+  }
+  .score-value {
+    font-size: 54px;
+  }
 }
