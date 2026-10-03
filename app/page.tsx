@@ -250,21 +250,27 @@ export default function FOMORadar() {
     }
   };
 
-  const loadRunners = async () => {
-    setRunnersLoading(true);
+  const loadRunners = async (silent = false) => {
+    if (!silent) setRunnersLoading(true);
     try {
       const res = await fetch('/api/runners');
       const data = await res.json();
       setRunners(data.tokens || []);
-      if (!data.tokens || data.tokens.length === 0) {
+      if (!silent && (!data.tokens || data.tokens.length === 0)) {
         toast.info('No early runners right now. The curve is quiet.');
       }
     } catch {
-      toast.error('Could not load early runners');
+      if (!silent) toast.error('Could not load early runners');
     } finally {
-      setRunnersLoading(false);
+      if (!silent) setRunnersLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadRunners(true);
+    const timer = setInterval(() => loadRunners(true), 20000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Watchlist helpers
   const addToWatchlist = async (targetMint?: string) => {
@@ -448,10 +454,10 @@ export default function FOMORadar() {
           </div>
         )}
 
-        {runners.length > 0 && (
+        {(runners.length > 0 || runnersLoading) && (
           <div className="mb-6">
             <div className="text-sm font-medium tracking-[0.5px] text-[#8b879c] mb-2 flex items-center gap-2">
-              EARLY RUNNERS — curve still filling, under $25k
+              EARLY RUNNERS — refreshes every 20s
               <button onClick={loadRunners} className="text-[10px] text-[#5c586c] hover:text-white">↻ refresh</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
