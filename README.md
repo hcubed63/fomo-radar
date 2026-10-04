@@ -2,7 +2,7 @@
 
 **GitHub:** https://github.com/hcubed63/fomo-radar  
 **Live Demo:** https://fomo-radar-blond.vercel.app (latest Vercel alias)
-
+**Test edit 2026-10-04** — checking auto-deploy + Early Runners button.
 This is a Solana momentum intelligence dashboard built to the detailed product spec.
 
 - Dual scores (FOMO Opportunity 0-100 + Exit Risk 0-100)
