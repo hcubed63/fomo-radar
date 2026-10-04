@@ -405,14 +405,14 @@ export default function FOMORadar() {
             <button onClick={() => loadDemo('9cRCn9rGT8V2imeM2BaKs13yhMEais3ruM3rPvTGpump')} className="text-xs px-3 py-1 rounded bg-[#1f1f25] hover:bg-[#2a2a30]">Real: ANSEM-like</button>
             <button onClick={() => loadDemo('Ai66LHZG9MCzg1WKdawwqduVAXpNDUuV8M3uyq5ppump')} className="text-xs px-3 py-1 rounded bg-[#1f1f25] hover:bg-[#2a2a30]">Real: CATE-like</button>
             <button 
-              onClick={loadHotTokens} 
+              onClick={() => loadHotTokens()} 
               disabled={hotLoading}
               className="text-xs px-3 py-1 rounded bg-[#22c55e]/10 hover:bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/30"
             >
               {hotLoading ? 'Loading...' : 'Hot Low-Cap (Pump.fun)'}
             </button>
             <button
-              onClick={loadRunners}
+              onClick={() => loadRunners()}
               disabled={runnersLoading}
               className="text-xs px-3 py-1 rounded bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20 text-[#f59e0b] border border-[#f59e0b]/30"
             >
@@ -427,7 +427,7 @@ export default function FOMORadar() {
           <div className="mb-6">
             <div className="text-sm font-medium tracking-[0.5px] text-[#8b879c] mb-2 flex items-center gap-2">
               HOT LOW-CAP PUMP.FUN TOKENS (live, free)
-              <button onClick={loadHotTokens} className="text-[10px] text-[#5c586c] hover:text-white">↻ refresh</button>
+              <button onClick={() => loadHotTokens()} className="text-[10px] text-[#5c586c] hover:text-white">↻ refresh</button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-2">
               {hotTokens.map((t: any) => (
@@ -458,7 +458,7 @@ export default function FOMORadar() {
           <div className="mb-6">
             <div className="text-sm font-medium tracking-[0.5px] text-[#8b879c] mb-2 flex items-center gap-2">
               EARLY RUNNERS — refreshes every 20s (loosened test)
-              <button onClick={loadRunners} className="text-[10px] text-[#5c586c] hover:text-white">↻ refresh</button>
+              <button onClick={() => loadRunners()} className="text-[10px] text-[#5c586c] hover:text-white">↻ refresh</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {runners.map((t: any) => (
