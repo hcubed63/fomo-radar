@@ -41,7 +41,8 @@ async function dexGate(hit: RunnerHit): Promise<RunnerHit | null> {
     const buys = pair.txns?.m5?.buys || 0;
     const sells = pair.txns?.m5?.sells || 0;
 
-    if (liq < 2000) return null;
+    if (liq < 300) return null;  // TEMP test - was 2000
+
     if ((m5 != null && m5 <= -8) || (h1 != null && h1 <= -15)) return null;
     if (sells > buys && sells >= 8) return null;
 
@@ -79,7 +80,7 @@ export async function GET() {
 
     return NextResponse.json({
       tokens: checked,
-      note: 'Alert needs a filling curve (loosened test limits). It is not a buy signal.',
+      note: 'Alert needs a filling curve (TEMP very loose test limits). It is not a buy signal.',
     });
   } catch (e) {
     console.error('Runner fetch failed', e);
