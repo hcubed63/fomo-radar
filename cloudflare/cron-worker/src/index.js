@@ -1,12 +1,14 @@
 // FOMO Radar alert trigger on Cloudflare (replaces the always-on box timer, scripts/alert-trigger.sh).
 // pump.fun blocks Vercel, but not Cloudflare, so this fetches the coin list here and POSTs it to
 // /api/telegram, which scores coins and sends Telegram alerts. Dedupe lives in KV (one key per mint).
+import { cheap, socials, enrich, judge, DEFAULT_RULES } from "./quality.js";
 const PAGES = 4;
+const MAX_ENRICH = 12; // 2 subrequests each; free plan allows 50 per run
 const SORTS = ["created_timestamp", "last_trade_timestamp"];
 const SEEN_TTL = 86400; // 24h
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36";
 const FIELDS = ["mint", "symbol", "name", "image_uri", "usd_market_cap", "market_cap_usd", "reply_count",
-  "created_timestamp", "complete", "real_token_reserves", "base_decimals", "ath_market_cap", "ath_market_cap_timestamp"];
+  "created_timestamp", "complete", "real_token_reserves", "base_decimals", "ath_market_cap", "ath_market_cap_timestamp", "creator", "bonding_curve", "associated_bonding_curve", "twitter", "telegram", "website"];
 
 async function fetchPage(sort, i) {
   const url = `https://frontend-api-v3.pump.fun/coins?offset=${i * 50}&limit=50&sort=${sort}&order=DESC&includeNsfw=false`;
@@ -32,6 +34,16 @@ async function runOnce(env) {
     cursor = l.list_complete ? undefined : l.cursor;
   } while (cursor);
 
+  // Extra checks only for coins that already pass the cheap rules and haven't alerted yet.
+  const seenSet = new Set(seen);
+  const now = Date.now();
+  const cands = coins.map((c) => [c, cheap(c, now)]).filter(([c, q]) => q && !seenSet.has(c.mint))
+    .sort((a, b) => b[1].fill - a[1].fill).slice(0, MAX_ENRICH);
+  const judged = await Promise.all(cands.map(async ([c, q]) => {
+    const s = socials(c); const e = await enrich(c); const j = judge(q, s, e, DEFAULT_RULES);
+    c.quality = { ...j, ...e, fill: Math.round(q.fill * 10) / 10 };
+    return { sym: c.symbol, pass: j.pass, score: j.score, why: j.why };
+  }));
   const r = await fetch(env.ENDPOINT, {
     method: "POST",
     headers: { Authorization: `Bearer ${env.CRON_SECRET}`, "Content-Type": "application/json" },
@@ -42,7 +54,7 @@ async function runOnce(env) {
   if (r.status === 200 && Array.isArray(resp.sentMints)) {
     await Promise.all(resp.sentMints.map((m) => env.SEEN.put(m, String(Date.now()), { expirationTtl: SEEN_TTL })));
   }
-  const summary = { pumpStatuses: pages.map((p) => p.status), coins: coins.length, seen: seen.length, endpoint: r.status,
+  const summary = { judged, pumpStatuses: pages.map((p) => p.status), coins: coins.length, seen: seen.length, endpoint: r.status,
     ok: resp.ok, scanned: resp.scanned, candidates: resp.candidates, sent: resp.sent, errors: resp.errors };
   console.log(JSON.stringify(summary));
   return summary;
