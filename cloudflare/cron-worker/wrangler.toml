@@ -1,0 +1,19 @@
+name = "fomo-radar-cron"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[triggers]
+crons = ["* * * * *"]
+
+[[kv_namespaces]]
+binding = "SEEN"
+id = "d243ded48a764ba9b973f009da52ee42"
+
+[vars]
+ENDPOINT = "https://fomo-radar-blond.vercel.app/api/telegram"
+
+[observability]
+enabled = true
+
+# Secret (set with `wrangler secret put CRON_SECRET`, never commit it): CRON_SECRET

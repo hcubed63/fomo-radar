@@ -10,13 +10,20 @@ export const maxDuration = 30;
 const sentThisInstance = new Set<string>();
 const MAX_ALERTS_PER_RUN = 5;
 
+// Quality checks done by the Cloudflare cron Worker (holders, top wallet, dev sells, socials, fill speed).
+interface Quality { pass: boolean; score: number; line: string; why: string[] }
+const qualityByMint = new Map<string, Quality>();
+
 function fmtUsd(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n) || n <= 0) return 'unknown';
   return n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Math.round(n)}`;
 }
 
 async function send(hit: RunnerHit, token: string, chatId: string): Promise<string | null> {
-  const text = `ALERT ${hit.symbol}\n${fmtUsd(hit.marketCap)} · ${hit.ageMin}m old · curve ${hit.curvePct}%\n${hit.reason}`;
+  const q = qualityByMint.get(hit.mint);
+  const text = q
+    ? `ALERT ${hit.symbol} · score ${q.score}/10\n${fmtUsd(hit.marketCap)} · ${hit.ageMin}m old · curve ${hit.curvePct}%\n${q.line}\nTake profit ~${fmtUsd(hit.marketCap * 1.25)} mcap (+25%) / Stop ~${fmtUsd(hit.marketCap * 0.85)} mcap (-15%)\nNot a buy. Check the chart first.`
+    : `ALERT ${hit.symbol}\n${fmtUsd(hit.marketCap)} · ${hit.ageMin}m old · curve ${hit.curvePct}%\n${hit.reason}`;
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
@@ -26,7 +33,10 @@ async function send(hit: RunnerHit, token: string, chatId: string): Promise<stri
         text,
         disable_web_page_preview: true,
         reply_markup: {
-          inline_keyboard: [[{ text: 'Open in Fomo', url: `https://fomo.family/tokens/solana/${hit.mint}` }]],
+          inline_keyboard: [[
+            { text: 'Open in Fomo', url: `https://fomo.family/tokens/solana/${hit.mint}` },
+            { text: 'Buy in Trojan', url: `https://t.me/solana_trojanbot?start=r-hcubed63-${hit.mint}` },
+          ]],
         },
       }),
     });
@@ -55,11 +65,18 @@ async function run(seen: Set<string>, pushed: PumpCoinRaw[] | null) {
   // pump.fun's API blocks most server fetches (Cloudflare bot check), so the trigger can push the coin list it fetched.
   const source = pushed && pushed.length ? 'pushed' : 'fetched';
   const coins = pushed && pushed.length ? pushed : await fetchPumpCoins(4);
+  qualityByMint.clear();
+  for (const c of coins) {
+    const q = (c as PumpCoinRaw & { quality?: Quality }).quality;
+    if (q && typeof q.pass === 'boolean' && typeof q.score === 'number') qualityByMint.set(c.mint, q);
+  }
   const hits = coins
     .map((coin) => scoreRunner(coin))
     .filter((hit): hit is RunnerHit => !!hit && hit.status === 'alert')
     .filter((hit) => !seen.has(hit.mint) && !sentThisInstance.has(hit.mint))
-    .sort((a, b) => b.fillPerMin - a.fillPerMin);
+    // Only coins the Worker checked and passed (no quality data = not checked = no alert).
+    .filter((hit) => qualityByMint.get(hit.mint)?.pass === true)
+    .sort((a, b) => (qualityByMint.get(b.mint)!.score - qualityByMint.get(a.mint)!.score) || b.fillPerMin - a.fillPerMin);
 
   const pairs = await fetchDexPairs(hits.map((h) => h.mint));
   const sentMints: string[] = [];
