@@ -12,7 +12,9 @@ const DEXSCREENER = 'https://api.dexscreener.com/latest/dex/tokens';
 const RUGCHECK = 'https://api.rugcheck.xyz/v1/tokens';
 
 interface DexPair {
-  liquidity?: { usd: number };
+  dexId?: string;
+  fdv?: number;
+  liquidity?: { usd?: number };
   volume?: { m5?: number; h1?: number; h24: number };
   priceUsd?: string;
   marketCap?: number;
@@ -32,8 +34,10 @@ async function fetchDex(mint: string) {
   const best = pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
   return {
     price: parseFloat(best.priceUsd || '0'),
-    marketCap: best.marketCap || 0,
-    liquidity: best.liquidity?.usd || 0,
+    // null = unknown (e.g. bonding-curve coins have no pool liquidity). Never invent a number.
+    marketCap: (best.marketCap || best.fdv || null) as number | null,
+    liquidity: (best.liquidity?.usd || null) as number | null,
+    onCurve: best.dexId === 'pumpfun',
     volume24h: best.volume?.h24 || 0,
     volume5m: best.volume?.m5 || 0,
     volume1h: best.volume?.h1 || 0,
@@ -44,15 +48,15 @@ async function fetchDex(mint: string) {
   };
 }
 
-async function fetchRug(mint: string) {
+async function fetchRug(mint: string): Promise<{ top10: number | null; risks: number | null }> {
   try {
     const res = await fetch(`${RUGCHECK}/${mint}/report`);
-    if (!res.ok) return { top10: 35, risks: 0 };
+    if (!res.ok) return { top10: null, risks: null };
     const data = await res.json();
     const top10 = (data.topHolders || []).slice(0, 10).reduce((sum: number, h: any) => sum + (h.pct || h.percentage || 0), 0);
     return { top10: Math.min(100, top10), risks: (data.risks || []).length };
   } catch {
-    return { top10: 42, risks: 1 };
+    return { top10: null, risks: null };
   }
 }
 
@@ -153,18 +157,22 @@ async function fetchPumpReplies(mint: string) {
 
 function generateDemoSignals(dex: any, rug: any, social?: SocialData | null, pump?: { replyCount: number } | null) {
   // Derive signals from real data + reasonable acceleration proxies for demo
-  const mc = dex.marketCap || 12000000;
-  const liq = dex.liquidity || 420000;
-  const vol = dex.volume24h || 1800000;
-  const buyR = dex.buyRatio || 0.58;
+  // Real values only. Unknown inputs fall back to neutral scores, not invented market data.
+  const mc = Math.max(1, dex.marketCap || 0);
+  const liqKnown = dex.liquidity != null && dex.liquidity > 0;
+  const liq = liqKnown ? dex.liquidity : 0;
+  const vol = dex.volume24h || 0;
+  const buyR = dex.buyRatio ?? 0.5;
+  const top10Known = rug.top10 != null;
+  const top10 = top10Known ? rug.top10 : 0;
 
   // Proxies for velocity/accel (real impl would use time series)
   const holderAccel = Math.min(1, 0.35 + (vol / (mc * 4)) * 1.8);
   const volumeAccel = Math.min(1, 0.4 + (buyR - 0.45) * 1.4);
-  const liqGrowth = Math.min(1, liq / (mc * 0.035));
+  const liqGrowth = liqKnown ? Math.min(1, liq / (mc * 0.035)) : 0.5;
   const walletQuality = Math.min(0.92, 0.48 + (buyR - 0.5) * 0.9);
   const attentionPriceDiv = Math.min(1, 0.55 + (vol / (mc * 3) - 0.4));
-  const healthyDist = Math.max(0.1, 1 - (rug.top10 / 110));
+  const healthyDist = top10Known ? Math.max(0.1, 1 - (top10 / 110)) : 0.5;
   const priceStructure = Math.min(0.95, 0.45 + (liqGrowth - 0.3) * 0.8);
 
   // Social (free first, then paid if key, else volume proxy):
@@ -191,9 +199,9 @@ function generateDemoSignals(dex: any, rug: any, social?: SocialData | null, pum
     socialSat = Math.max(0, socialVel - 0.75);
   }
 
-  const whaleDist = Math.max(0, (rug.top10 - 28) / 70);
-  const concIncrease = Math.max(0, (rug.top10 - 32) / 80);
-  const liqContraction = Math.max(0, 0.3 - liqGrowth);
+  const whaleDist = top10Known ? Math.max(0, (top10 - 28) / 70) : 0;
+  const concIncrease = top10Known ? Math.max(0, (top10 - 32) / 80) : 0;
+  const liqContraction = liqKnown ? Math.max(0, 0.3 - liqGrowth) : 0;
   const retailFlood = Math.min(1, (mc < 8000000 ? 0.3 : 0.65) + (1 - healthyDist) * 0.3);
   const buyExhaust = Math.max(0, 0.65 - buyR);
   const smartExit = whaleDist * 0.7;
@@ -205,7 +213,7 @@ function generateDemoSignals(dex: any, rug: any, social?: SocialData | null, pum
     socialVel, healthyDist, priceStructure,
     whaleDist, concIncrease, liqContraction, socialSat, retailFlood,
     buyExhaust, smartExit, largeOutflows, extremePrice,
-    holderCount: Math.floor(280 + mc / 45000),
+    holderCount: null as number | null, // no holder data source yet
     price: dex.price,
   };
 }
@@ -277,7 +285,7 @@ export async function analyzeMint(mint: string): Promise<AnalysisResult> {
       : ['dexscreener', 'rugcheck'];
   const factors = [
     'Multi-source acceleration aligned',
-    rug.top10 > 45 ? 'Elevated holder concentration' : 'Reasonable distribution',
+    rug.top10 == null ? 'Holder concentration unknown (RugCheck unavailable)' : rug.top10 > 45 ? 'Elevated holder concentration' : 'Reasonable distribution',
     hasRealSocial 
       ? 'Live social from LunarCrush' 
       : hasPumpSocial 

@@ -46,8 +46,8 @@ export interface AnalysisResult {
 
   // Current market snapshot (from providers)
   price: number;
-  marketCap: number;
-  liquidity: number;
+  marketCap: number | null; // null = unknown
+  liquidity: number | null; // null = unknown or still on the bonding curve
   volume24h: number;
   volume5m?: number;
   buyRatio5m?: number;

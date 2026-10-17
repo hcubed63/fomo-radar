@@ -135,7 +135,7 @@ export function buildRadarCards(data: any): RadarCard[] {
   return [
     {
       title: 'Holder Radar',
-      current: `${Math.round((data.holderCount || 420) * (1 + (data.holderAccel || 0.4)))}`,
+      current: data.holderCount ? `${Math.round(data.holderCount)}` : 'unknown',
       change: `+${Math.round((data.holderAccel || 0.4) * 28)} (15m)`,
       acceleration: `${((data.holderAccel || 0.4) * 2.1).toFixed(1)}x`,
       status: data.holderAccel > 0.6 ? 'Building' : 'Stable',
@@ -145,9 +145,9 @@ export function buildRadarCards(data: any): RadarCard[] {
       title: 'Smart Money Radar',
       current: `${Math.round((data.walletQuality || 0.6) * 100)}%`,
       change: `+${Math.round((data.walletQuality || 0.6) * 11)}%`,
-      acceleration: '2.4x',
-      status: 'Building',
-      assessment: 'Multiple historically profitable wallets accumulating in last 40m.'
+      acceleration: '—',
+      status: 'Stable',
+      assessment: 'No wallet data yet. This is the 5m buy ratio, not tracked smart wallets.'
     },
     {
       title: 'Whale Radar',
@@ -159,17 +159,17 @@ export function buildRadarCards(data: any): RadarCard[] {
     },
     {
       title: 'Volume Radar',
-      current: `$${(data.volume24h || 1200000).toLocaleString()}`,
+      current: data.volume24h ? `$${Math.round(data.volume24h).toLocaleString()}` : 'unknown',
       change: `+${Math.round((data.volumeAccel || 0.7) * 180)}% 5m`,
-      acceleration: `${(data.volumeAccel || 0.7 * 2.8).toFixed(1)}x`,
+      acceleration: `${((data.volumeAccel || 0.7) * 2.8).toFixed(1)}x`,
       status: 'Building',
       assessment: 'Volume velocity strong with buy-heavy imbalance.'
     },
     {
       title: 'Liquidity Radar',
-      current: `$${(data.liquidity || 380000).toLocaleString()}`,
+      current: data.liquidity ? `$${Math.round(data.liquidity).toLocaleString()}` : data.onCurve ? 'on curve (no pool yet)' : 'unknown',
       change: `+${Math.round((data.liqGrowth || 0.4) * 12)}%`,
-      acceleration: `${(data.liqGrowth || 0.4 * 1.6).toFixed(1)}x`,
+      acceleration: `${((data.liqGrowth || 0.4) * 1.6).toFixed(1)}x`,
       status: data.liqContraction > 0.4 ? 'Warning' : 'Building',
       assessment: 'Liquidity expanding in line with volume — healthy.'
     },
@@ -183,9 +183,9 @@ export function buildRadarCards(data: any): RadarCard[] {
     },
     {
       title: 'Price Radar',
-      current: `$${data.price?.toFixed(8) || '0.000034'}`,
+      current: data.price ? `$${data.price.toFixed(8)}` : 'unknown',
       change: `+${((data.priceStructure || 0.5) * 28).toFixed(0)}%`,
-      acceleration: `${(data.priceStructure || 0.5 * 1.9).toFixed(1)}x`,
+      acceleration: `${((data.priceStructure || 0.5) * 1.9).toFixed(1)}x`,
       status: data.extremePrice > 0.6 ? 'Warning' : 'Building',
       assessment: 'Structure improving but not yet parabolic.'
     }

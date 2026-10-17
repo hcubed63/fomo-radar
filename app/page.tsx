@@ -457,7 +457,7 @@ export default function FOMORadar() {
         {(runners.length > 0 || runnersLoading) && (
           <div className="mb-6">
             <div className="text-sm font-medium tracking-[0.5px] text-[#8b879c] mb-2 flex items-center gap-2">
-              EARLY RUNNERS — refreshes every 20s (loosened test)
+              EARLY RUNNERS — refreshes every 20s
               <button onClick={() => loadRunners()} className="text-[10px] text-[#5c586c] hover:text-white">↻ refresh</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -545,7 +545,7 @@ export default function FOMORadar() {
                   </div>
                   <div className="text-[10px] mt-1">{item.stage}</div>
                   <div className="text-[10px] text-[#8b879c] mt-0.5">
-                    ${item.price.toFixed(item.price < 0.01 ? 6 : 4)} • MC ${Math.round(item.marketCap / 1000000)}M
+                    ${item.price.toFixed(item.price < 0.01 ? 6 : 4)} • MC {item.marketCap ? `$${Math.round(item.marketCap / 1000000)}M` : 'unknown'}
                   </div>
                   <div className="text-[10px] text-[#8b879c] mt-0.5">
                     5m Vol ${(item.volume5m || 0).toLocaleString()} • Buy {Math.round((item.buyRatio5m || 0.5) * 100)}%
@@ -611,7 +611,7 @@ export default function FOMORadar() {
 
               <div className="text-xs sm:text-sm tabular-nums text-left sm:text-right">
                 <div>Price: <span className="font-medium text-white">${result.price.toFixed(result.price < 0.01 ? 8 : 6)}</span></div>
-                <div className="text-[#8b879c]">MC: ${result.marketCap.toLocaleString()} • Liq: ${result.liquidity.toLocaleString()} • 24h Vol: ${result.volume24h.toLocaleString()} {result.volume5m ? `• 5m: $${(result.volume5m || 0).toLocaleString()}` : ''}</div>
+                <div className="text-[#8b879c]">MC: {result.marketCap != null ? `$${result.marketCap.toLocaleString()}` : 'unknown'} • Liq: {result.liquidity != null ? `$${result.liquidity.toLocaleString()}` : 'unknown'} • 24h Vol: ${result.volume24h.toLocaleString()} {result.volume5m ? `• 5m: $${(result.volume5m || 0).toLocaleString()}` : ''}</div>
                 {result.pumpReplyCount && result.pumpReplyCount > 0 && (
                   <div className="text-[10px] text-emerald-400 mt-0.5">Pump.fun comments: {result.pumpReplyCount}</div>
                 )}
