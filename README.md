@@ -2,7 +2,7 @@
 
 **GitHub:** https://github.com/hcubed63/fomo-radar  
 **Live Demo:** https://fomo-radar-blond.vercel.app (latest Vercel alias)
-**Test edit 2026-10-04** — checking auto-deploy + Early Runners button.
+
 This is a Solana momentum intelligence dashboard built to the detailed product spec.
 
 - Dual scores (FOMO Opportunity 0-100 + Exit Risk 0-100)
@@ -108,3 +108,10 @@ Companion tools from the stack (use alongside Radar):
 In the app: after analyzing a mint you will see direct links in the header (and compact ones on My Tokens cards) to jump straight to these tools with context.
 
 All free. No new costs or dependencies. Radar stays focused on scored, provenanced analysis.
+
+## Telegram alerts (Early Runners)
+
+- `/api/telegram` scores pump.fun bonding-curve coins and sends `ALERT` messages to the Telegram bot (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`).
+- Rules: market cap $4k–25k, at least 4 minutes old (max 45), curve 12–65% and filling ≥ 0.8%/min, not off its high, price not rolling over. Curve % = tokens sold out of 793.1M.
+- The endpoint needs the trigger secret (`Authorization: Bearer …` or `?key=…`). Only its SHA-256 is in the repo; `CRON_SECRET` on Vercel is also accepted if set.
+- pump.fun blocks server-side fetches from Vercel, so `scripts/alert-trigger.sh loop` runs every minute on an always-on machine: it fetches the coin list with curl, POSTs it with the list of already-alerted mints, and records what was sent so no coin is alerted twice.

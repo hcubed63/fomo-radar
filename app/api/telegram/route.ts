@@ -1,68 +1,122 @@
 import { NextResponse } from 'next/server';
 import { scoreRunner, type PumpCoinRaw, type RunnerHit } from '../../../lib/runners';
+import { fetchPumpCoins, fetchDexPairs, poolCheck } from '../../../lib/pump';
+import { isAuthorized } from '../../../lib/cronAuth';
 
-const sent = new Set<string>();
+export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
-async function fetchCoins(sort: string): Promise<PumpCoinRaw[]> {
-  const url = `https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=${sort}&order=DESC&includeNsfw=false`;
-  const res = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/json' } });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+// Backup only: resets on cold starts. The scheduled trigger passes the persistent seen list.
+const sentThisInstance = new Set<string>();
+const MAX_ALERTS_PER_RUN = 5;
+
+function fmtUsd(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n) || n <= 0) return 'unknown';
+  return n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Math.round(n)}`;
 }
 
-async function stillBid(hit: RunnerHit): Promise<boolean> {
-  const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${hit.mint}`, { cache: 'no-store' });
-  if (!res.ok) return hit.status === 'watch';
-  const data = await res.json();
-  const pairs = Array.isArray(data.pairs) ? data.pairs : [];
-  if (pairs.length === 0) return false;
-  const liq = Math.max(...pairs.map((p: { liquidity?: { usd?: number } }) => p.liquidity?.usd || 0));
-  const pair = pairs[0];
-  const m5 = pair.priceChange?.m5;
-  const h1 = pair.priceChange?.h1;
-  if (liq < 2000) return false;
-  if ((m5 != null && m5 <= -8) || (h1 != null && h1 <= -15)) return false;
-  return true;
+async function send(hit: RunnerHit, token: string, chatId: string): Promise<string | null> {
+  const text = `ALERT ${hit.symbol}\n${fmtUsd(hit.marketCap)} · ${hit.ageMin}m old · curve ${hit.curvePct}%\n${hit.reason}`;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        disable_web_page_preview: true,
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Open in Fomo', url: `https://fomo.family/tokens/solana/${hit.mint}` }]],
+        },
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const err = `telegram ${res.status}: ${(body as { description?: string }).description || 'send failed'}`;
+      console.error(`Telegram send failed for ${hit.mint}: ${err}`);
+      return err;
+    }
+    return null;
+  } catch (e) {
+    const err = `telegram request failed: ${e instanceof Error ? e.message : String(e)}`;
+    console.error(`Telegram send failed for ${hit.mint}: ${err}`);
+    return err;
+  }
 }
 
-async function send(hit: RunnerHit, token: string, chatId: string) {
-  const mc = hit.marketCap >= 1000 ? `$${(hit.marketCap / 1000).toFixed(1)}k` : `$${hit.marketCap}`;
-  const text = `${hit.status === 'alert' ? 'ALERT' : 'WATCH'} ${hit.symbol}\n${mc} · ${hit.ageMin}m old · curve ${hit.curvePct}%\n${hit.reason}`;
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      reply_markup: {
-        inline_keyboard: [[{ text: 'Open in Fomo', url: `https://fomo.family/tokens/solana/${hit.mint}` }]],
-      },
-    }),
+async function run(seen: Set<string>, pushed: PumpCoinRaw[] | null) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) {
+    console.error('Telegram alert run: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID missing');
+    return NextResponse.json({ ok: false, error: 'telegram not configured' }, { status: 500 });
+  }
+
+  // pump.fun's API blocks most server fetches (Cloudflare bot check), so the trigger can push the coin list it fetched.
+  const source = pushed && pushed.length ? 'pushed' : 'fetched';
+  const coins = pushed && pushed.length ? pushed : await fetchPumpCoins(4);
+  const hits = coins
+    .map((coin) => scoreRunner(coin))
+    .filter((hit): hit is RunnerHit => !!hit && hit.status === 'alert')
+    .filter((hit) => !seen.has(hit.mint) && !sentThisInstance.has(hit.mint))
+    .sort((a, b) => b.fillPerMin - a.fillPerMin);
+
+  const pairs = await fetchDexPairs(hits.map((h) => h.mint));
+  const sentMints: string[] = [];
+  const errors: string[] = [];
+  const skipped: Record<string, string> = {};
+
+  for (const hit of hits) {
+    if (sentMints.length >= MAX_ALERTS_PER_RUN) break;
+    const check = poolCheck(hit, pairs.get(hit.mint));
+    if (!check.ok) {
+      skipped[hit.mint] = check.why;
+      continue;
+    }
+    const err = await send(hit, token, chatId);
+    if (err) {
+      errors.push(err);
+      continue;
+    }
+    sentThisInstance.add(hit.mint);
+    sentMints.push(hit.mint);
+  }
+
+  if (coins.length === 0) console.error('Telegram alert run: pump.fun returned no coins');
+  return NextResponse.json({
+    ok: errors.length === 0 && coins.length > 0,
+    source,
+    scanned: coins.length,
+    candidates: hits.length,
+    sent: sentMints.length,
+    sentMints,
+    skipped,
+    errors,
   });
 }
 
-export async function GET() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) return NextResponse.json({ ok: false, error: 'telegram not configured' }, { status: 500 });
+// Manual trigger: GET /api/telegram?key=SECRET or Authorization: Bearer SECRET
+export async function GET(req: Request) {
+  if (!isAuthorized(req)) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  return run(new Set(), null);
+}
 
-  const [fresh, active] = await Promise.all([fetchCoins('created_timestamp'), fetchCoins('last_trade_timestamp')]);
-  const byMint = new Map<string, PumpCoinRaw>();
-  for (const coin of [...fresh, ...active]) if (coin?.mint) byMint.set(coin.mint, coin);
-
-  const hits = [...byMint.values()]
-    .map((coin) => scoreRunner(coin))
-    .filter((hit): hit is RunnerHit => !!hit && hit.status === 'alert')
-    .slice(0, 5);
-
-  let sentCount = 0;
-  for (const hit of hits) {
-    if (sent.has(hit.mint)) continue;
-    if (!(await stillBid(hit))) continue;
-    sent.add(hit.mint);
-    await send(hit, token, chatId);
-    sentCount += 1;
+// Scheduled trigger: POST with Authorization: Bearer SECRET and body
+// { seen: [mints already alerted], coins?: [pump.fun coin objects] }
+export async function POST(req: Request) {
+  if (!isAuthorized(req)) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  let seen: string[] = [];
+  let coins: PumpCoinRaw[] | null = null;
+  try {
+    const body = await req.json();
+    if (Array.isArray(body?.seen)) seen = body.seen.filter((m: unknown): m is string => typeof m === 'string').slice(0, 5000);
+    if (Array.isArray(body?.coins)) {
+      coins = body.coins
+        .filter((c: unknown): c is PumpCoinRaw => !!c && typeof (c as PumpCoinRaw).mint === 'string')
+        .slice(0, 1000);
+    }
+  } catch {
+    // no body: treat as nothing seen
   }
-  return NextResponse.json({ ok: true, sent: sentCount });
+  return run(new Set(seen), coins);
 }

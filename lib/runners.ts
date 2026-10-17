@@ -18,6 +18,8 @@ export interface PumpCoinRaw {
   created_timestamp?: number;
   complete?: boolean;
   real_sol_reserves?: number;
+  real_token_reserves?: number;
+  base_decimals?: number;
   ath_market_cap?: number;
   ath_market_cap_timestamp?: number;
 }
@@ -36,8 +38,9 @@ export interface RunnerHit {
   reason: string;
 }
 
-const GRADUATION_SOL = 85;
-const LAMPORTS = 1_000_000_000;
+// pump.fun curves start with 793.1M tokens for sale (6 decimals) and graduate when they are sold.
+// Measuring tokens sold works whatever the quote token is (SOL, USDC or another pump token).
+const CURVE_TOKENS = 793_100_000;
 
 export function marketCapUsd(coin: PumpCoinRaw): number {
   const usd = coin.market_cap_usd || coin.usd_market_cap;
@@ -46,8 +49,11 @@ export function marketCapUsd(coin: PumpCoinRaw): number {
 }
 
 export function curvePercent(coin: PumpCoinRaw): number {
-  const sol = (coin.real_sol_reserves || 0) / LAMPORTS;
-  return Math.max(0, Math.min(100, (sol / GRADUATION_SOL) * 100));
+  if (coin.complete) return 100;
+  if (coin.real_token_reserves == null) return 0;
+  const decimals = coin.base_decimals ?? 6;
+  const left = Number(coin.real_token_reserves) / 10 ** decimals;
+  return Math.max(0, Math.min(100, (1 - left / CURVE_TOKENS) * 100));
 }
 
 export function scoreRunner(coin: PumpCoinRaw, now = Date.now()): RunnerHit | null {
@@ -78,30 +84,32 @@ export function scoreRunner(coin: PumpCoinRaw, now = Date.now()): RunnerHit | nu
   if (ageMin < 4) return null;
   if (ageMin < 8 && fillPerMin > 8) return null;
 
-  if (held < 0.6 && ath > mc * 1.5) {
+  if (held < 0.7 && ath > mc * 1.25) {
     return { ...base, status: 'late', reason: 'Already off its high. Launch spike, not a hold.' };
   }
-  if (ageMin > 300 && curvePct < 70) {
+  if (ageMin > 180 && curvePct < 80) {
     return { ...base, status: 'stalled', reason: 'Curve has been sitting. Not a fresh run.' };
   }
-  if (mc > 80000 || curvePct >= 90) {
-    return { ...base, status: 'late', reason: 'Already up the curve (loosened for test).' };
+  if (mc > 40000 || curvePct >= 85) {
+    return { ...base, status: 'late', reason: 'Already up the curve. This is the chase, not the find.' };
+  }
+  if (held < 0.55 && ath > mc * 1.5) {
+    return { ...base, status: 'late', reason: 'Already dumped off its high.' };
   }
 
-  // Loosened for testing (original was stricter: 4-25k, fast fill, very early)
-  if (mc >= 1000 && mc <= 65000 && ageMin <= 100 && curvePct >= 5 && curvePct <= 78 && fillPerMin >= 0.35) {
+  if (mc >= 4000 && mc <= 25000 && ageMin <= 45 && curvePct >= 12 && curvePct <= 65 && fillPerMin >= 0.8) {
     return {
       ...base,
       status: 'alert',
-      reason: 'Curve filling fast, still early (test ~$65k).',
+      reason: 'Curve filling, under $25k, past the first 4 minutes. Not a buy. Check the chart first.',
     };
   }
 
-  if (mc < 90000 && ageMin <= 240 && curvePct >= 4 && curvePct <= 85 && fillPerMin >= 0.2) {
+  if (mc < 40000 && ageMin <= 90 && curvePct >= 8 && curvePct <= 80 && fillPerMin >= 0.35) {
     return {
       ...base,
       status: 'watch',
-      reason: 'Early curve (loosened test).',
+      reason: 'Early curve, not fast enough yet for an alert.',
     };
   }
 

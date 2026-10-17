@@ -1,73 +1,14 @@
 import { NextResponse } from 'next/server';
-import { scoreRunner, type PumpCoinRaw, type RunnerHit } from '../../../lib/runners';
+import { scoreRunner, type RunnerHit } from '../../../lib/runners';
+import { fetchPumpCoins, fetchDexPairs, poolCheck } from '../../../lib/pump';
 
-async function fetchCoins(sort: string): Promise<PumpCoinRaw[]> {
-  const url = `https://frontend-api-v3.pump.fun/coins?offset=0&limit=50&sort=${sort}&order=DESC&includeNsfw=false`;
-  const res = await fetch(url, {
-    next: { revalidate: 20 },
-    headers: { Accept: 'application/json' },
-  });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
-}
-
-interface DexPair {
-  liquidity?: { usd?: number };
-  priceChange?: { m5?: number; h1?: number };
-  txns?: { m5?: { buys?: number; sells?: number } };
-  volume?: { m5?: number };
-}
-
-async function dexGate(hit: RunnerHit): Promise<RunnerHit | null> {
-  try {
-    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${hit.mint}`, {
-      next: { revalidate: 20 },
-      headers: { Accept: 'application/json' },
-    });
-    if (!res.ok) return hit.status === 'alert' ? { ...hit, status: 'watch', reason: 'No live pool check yet. Treat as unconfirmed.' } : hit;
-    const data = await res.json();
-    const pairs: DexPair[] = Array.isArray(data.pairs) ? data.pairs : [];
-    if (pairs.length === 0) {
-      // Still on the curve. Curve speed alone is not enough for an alert.
-      return hit.status === 'alert'
-        ? { ...hit, status: 'watch', reason: 'Curve is filling, but there is no pool yet to confirm a real bid.' }
-        : hit;
-    }
-    const pair = pairs.reduce((best, p) => ((p.liquidity?.usd || 0) > (best.liquidity?.usd || 0) ? p : best), pairs[0]);
-    const liq = pair.liquidity?.usd || 0;
-    const m5 = pair.priceChange?.m5;
-    const h1 = pair.priceChange?.h1;
-    const buys = pair.txns?.m5?.buys || 0;
-    const sells = pair.txns?.m5?.sells || 0;
-
-    if (liq < 300) return null;  // TEMP test - was 2000
-
-    if ((m5 != null && m5 <= -8) || (h1 != null && h1 <= -15)) return null;
-    if (sells > buys && sells >= 8) return null;
-
-    return {
-      ...hit,
-      reason: `${hit.reason} Pool $${Math.round(liq).toLocaleString()} and price not rolling over.`,
-    };
-  } catch {
-    return hit.status === 'alert' ? { ...hit, status: 'watch', reason: 'Pool check failed. Not confirmed.' } : hit;
-  }
-}
+const CACHE: RequestInit = { next: { revalidate: 20 } };
 
 export async function GET() {
   try {
-    const [fresh, active] = await Promise.all([
-      fetchCoins('created_timestamp'),
-      fetchCoins('last_trade_timestamp'),
-    ]);
+    const coins = await fetchPumpCoins(4, CACHE);
 
-    const byMint = new Map<string, PumpCoinRaw>();
-    for (const coin of [...fresh, ...active]) {
-      if (coin?.mint) byMint.set(coin.mint, coin);
-    }
-
-    const ranked = [...byMint.values()]
+    const ranked = coins
       .map((coin) => scoreRunner(coin))
       .filter((hit): hit is RunnerHit => !!hit && (hit.status === 'alert' || hit.status === 'watch'))
       .sort((a, b) => {
@@ -76,11 +17,24 @@ export async function GET() {
       })
       .slice(0, 12);
 
-    const checked = (await Promise.all(ranked.map(dexGate))).filter((hit): hit is RunnerHit => !!hit);
+    const pairs = await fetchDexPairs(ranked.map((h) => h.mint), CACHE);
+    const checked: RunnerHit[] = [];
+    for (const hit of ranked) {
+      const list = pairs.get(hit.mint);
+      const check = poolCheck(hit, list);
+      if (!check.ok) continue;
+      const liq = check.pair?.liquidity?.usd;
+      let note: string;
+      if (list == null) note = 'Pool check failed, so price action is unconfirmed.';
+      else if (!check.pair) note = 'Not on Dexscreener yet.';
+      else if (check.pair.dexId === 'pumpfun' || !liq) note = 'Still on the bonding curve, price not rolling over.';
+      else note = `Pool $${Math.round(liq).toLocaleString()} and price not rolling over.`;
+      checked.push({ ...hit, reason: `${hit.reason} ${note}` });
+    }
 
     return NextResponse.json({
       tokens: checked,
-      note: 'Alert needs a filling curve (TEMP very loose test limits). It is not a buy signal.',
+      note: 'Alert = curve filling, $4k–25k market cap, at least 4 minutes old. It is not a buy signal.',
     });
   } catch (e) {
     console.error('Runner fetch failed', e);
