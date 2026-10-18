@@ -17,6 +17,12 @@ class_name = "PlayTracker"
 tag = "v1"
 new_sqlite_classes = ["PlayTracker"]
 
+# PAUSED 19 Oct 2026 (Hans): the Durable Object stops re-arming its minute alarm while PAUSED = "1".
+# Stored trades stay in the DO and /play-log stays readable. To re-enable: set PAUSED = "0", redeploy,
+# then GET /play-log once (that wakes the DO, which re-arms its alarm).
+[vars]
+PAUSED = "1"
+
 [observability]
 enabled = true
 

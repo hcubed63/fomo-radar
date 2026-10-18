@@ -90,11 +90,16 @@ export class PlayTracker extends DurableObject {
       buys3 INTEGER, sells3 INTEGER, bsr REAL, detectLagSec INTEGER, solUsd REAL, status TEXT, peak REAL, lastBucket INTEGER, lastClose REAL, lastTs INTEGER,
       exitTs INTEGER, exitReason TEXT, exitMc REAL, exitPct REAL, peakPct REAL, pnlUsd REAL, dataGaps INTEGER DEFAULT 0)`);
     this.running = false;
-    ctx.blockConcurrencyWhile(async () => { if (!(await ctx.storage.getAlarm())) await ctx.storage.setAlarm(nextMinute()); });
+    this.paused = env.PAUSED === "1";
+    ctx.blockConcurrencyWhile(async () => {
+      if (this.paused) await ctx.storage.deleteAlarm(); // paused: no scheduled ticks, data kept
+      else if (!(await ctx.storage.getAlarm())) await ctx.storage.setAlarm(nextMinute());
+    });
   }
   async alarm() {
+    if (this.paused) { await this.ctx.storage.deleteAlarm(); return; }
     try { await this.tick(); }
-    finally { await this.ctx.storage.setAlarm(nextMinute()); }
+    finally { if (!this.paused) await this.ctx.storage.setAlarm(nextMinute()); }
   }
   meta(k, v) {
     if (v === undefined) { const r = this.sql.exec(`SELECT v FROM meta WHERE k=?`, k).toArray()[0]; return r ? JSON.parse(r.v) : null; }
@@ -232,6 +237,7 @@ export class PlayTracker extends DurableObject {
       exitTime: bris(r.exitTs), exitReason: r.exitReason, exitMcSol: r2(r.exitMc), exitPct: r2(r.exitPct), peakPct: r2(r.status === "open" ? (r.peak / r.entryMc - 1) * 100 : r.peakPct),
       pnlUsd: r2(r.pnlUsd), dataGaps: r.dataGaps });
     return {
+      paused: this.paused,
       about: "Paper only. Entry: first launch-aligned minute (<=30 min after launch) closing >= 60 SOL mcap with (buys+1)/(sells+1) >= 2.5 over that minute and the 2 before; exit -10% stop, 25% trail from peak once +50%, 60-min time stop. $10 per trade, 1% fee + 0.0015 SOL priority each way, 3% slippage each way (+2% <40 SOL, +2% more <30 SOL). Stats on closed trades by exit time, $200 bankroll. Times Brisbane (UTC+10).",
       startedAt: bris(this.meta("startedAt")), lastRun: this.meta("lastRun") ? { ...this.meta("lastRun"), at: bris(this.meta("lastRun").at) } : null,
       counters: this.meta("counters"), open: rows.filter((r) => r.status === "open").length,

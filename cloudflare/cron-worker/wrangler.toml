@@ -3,8 +3,10 @@ main = "src/index.js"
 compatibility_date = "2025-09-01"
 workers_dev = true
 
+# PAUSED 19 Oct 2026 (Hans): no scheduled runs. Code, KV and /log stay intact. To re-enable, restore:
+# crons = ["* * * * *"]
 [triggers]
-crons = ["* * * * *"]
+crons = []
 
 [[kv_namespaces]]
 binding = "SEEN"
