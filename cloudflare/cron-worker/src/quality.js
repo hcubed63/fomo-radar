@@ -64,7 +64,8 @@ export function judge(c, s, e, rules = DEFAULT_RULES) {
   const why = [];
   if (c.fill < rules.minFill) why.push("slow fill");
   if (rules.needSocial && !(s.twitter || s.telegram || s.website)) why.push("no socials");
-  if (e.devSold === true) why.push("dev sold");
+  // Fail closed: the rule is "dev not sold", so unknown (trades fetch failed) rejects too.
+  if (e.devSold !== false) why.push(e.devSold === true ? "dev sold" : "dev sells unknown");
   if (e.holders != null && e.holders < rules.minHolders) why.push("few holders");
   if (e.topPct != null && e.topPct > rules.maxTopPct) why.push("top wallet heavy");
   if (e.devPct != null && e.devPct > rules.maxDevPct) why.push("dev heavy");
