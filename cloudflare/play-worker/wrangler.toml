@@ -1,0 +1,23 @@
+name = "fomo-radar-play"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# Live paper tracking of the one strategy-search survivor (no trading, no Telegram).
+# No cron trigger: the account is at the Workers Free limit of 5 cron triggers, so the Durable
+# Object re-arms its own alarm ~5 s after every minute boundary instead.
+
+# State lives in a SQLite-backed Durable Object (free plan), not KV, so it doesn't use the
+# account's 1,000 KV writes/day that fomo-radar-cron and fomo-radar-launch depend on.
+[[durable_objects.bindings]]
+name = "PLAY"
+class_name = "PlayTracker"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PlayTracker"]
+
+[observability]
+enabled = true
+
+# Secret (wrangler secret put CRON_SECRET, same value as fomo-radar-cron): CRON_SECRET
