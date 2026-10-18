@@ -139,3 +139,17 @@ export function csv(rs) {
   const esc = (v) => (v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
   return [COLS.join(","), ...rs.map((r) => COLS.map((c) => esc(r[c])).join(","))].join("\n");
 }
+
+// Merge-on-write: re-read the stored state and combine, so an overlapping run can't erase another's updates.
+export async function saveState(env, st) {
+  const cur = (await env.SEEN.get("state", "json")) || { seen: {}, alerts: [] };
+  const seen = { ...(cur.seen || {}), ...st.seen };
+  const byMint = new Map();
+  for (const a of [...(cur.alerts || []), ...st.alerts]) {
+    const old = byMint.get(a.mint);
+    if (!old || (a.status === "closed" && old.status !== "closed") || (a.lastCheck || 0) > (old.lastCheck || 0) ||
+        Object.values(a).filter((v) => v != null).length > Object.values(old).filter((v) => v != null).length && (a.lastCheck || 0) >= (old.lastCheck || 0)) byMint.set(a.mint, a);
+  }
+  const alerts = [...byMint.values()].sort((x, y) => x.alertTs - y.alertTs).slice(-MAX_LOG);
+  await env.SEEN.put("state", JSON.stringify({ ...st, seen, alerts, backfilled: st.backfilled || cur.backfilled, lastSave: Date.now() }));
+}
