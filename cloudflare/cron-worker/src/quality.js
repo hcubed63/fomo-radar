@@ -37,7 +37,7 @@ export async function enrich(coin) {
     getJson(`https://frontend-api-v3.pump.fun/coins/top-holders/${coin.mint}`),
     getJson(`https://swap-api.pump.fun/v2/coins/${coin.mint}/trades?limit=100&cursor=0&minSolAmount=0`),
   ]);
-  const out = { holders: null, topPct: null, devPct: null, devSold: null, devTradesSeen: null };
+  const out = { newBuyers5m: null, holders: null, topPct: null, devPct: null, devSold: null, devTradesSeen: null };
   if (h && Array.isArray(h.topHolders)) {
     out.holders = typeof h.totalHolders === "number" ? h.totalHolders : null;
     // The bonding curve account holds the unsold supply; it isn't a wallet.
@@ -48,6 +48,9 @@ export async function enrich(coin) {
     out.devPct = dev ? Math.round(pct(dev) * 10) / 10 : 0;
   }
   if (t && Array.isArray(t.trades)) {
+    // Holder-growth proxy before the alert: distinct buyer wallets in the last 5 min of the latest 100 trades.
+    const cut = Date.now() - 5 * 60000;
+    out.newBuyers5m = new Set(t.trades.filter((x) => x.type === "buy" && Date.parse(x.timestamp) >= cut).map((x) => x.userAddress)).size;
     const devTrades = t.trades.filter((x) => x.userAddress === coin.creator);
     out.devTradesSeen = devTrades.length;
     out.devSold = devTrades.some((x) => x.type === "sell");
