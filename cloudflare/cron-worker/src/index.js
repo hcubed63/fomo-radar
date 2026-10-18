@@ -1,7 +1,7 @@
 // FOMO Radar alert trigger on Cloudflare (replaces the always-on box timer, scripts/alert-trigger.sh).
 // pump.fun blocks Vercel, but not Cloudflare, so this fetches the coin list here and POSTs it to
 // /api/telegram, which scores coins and sends Telegram alerts. Dedupe and the alert log live in one KV key (see outcomes.js).
-import { loadState, newAlert, checkOpen, rows, summary, csv } from "./outcomes.js";
+import { saveState, loadState, newAlert, checkOpen, rows, summary, csv } from "./outcomes.js";
 import { cheap, socials, enrich, judge, DEFAULT_RULES } from "./quality.js";
 const PAGES = 4;
 const MAX_ENRICH = 12; // 2 subrequests each
@@ -58,7 +58,7 @@ async function runOnce(env) {
     }
     st.dirty = true;
   }
-  if (st.dirty) { delete st.dirty; await env.SEEN.put("state", JSON.stringify(st)); }
+  if (st.dirty) { delete st.dirty; await saveState(env, st); }
   const summary = { outcomeCalls, open: st.alerts.filter((a) => a.status === "open").length, judged, pumpStatuses: pages.map((p) => p.status), coins: coins.length, seen: seen.length, endpoint: r.status,
     ok: resp.ok, scanned: resp.scanned, candidates: resp.candidates, sent: resp.sent, errors: resp.errors };
   console.log(JSON.stringify(summary));
@@ -72,7 +72,12 @@ export default {
     const auth = req.headers.get("Authorization") || "";
     if (!env.CRON_SECRET || (auth !== `Bearer ${env.CRON_SECRET}` && u.searchParams.get("key") !== env.CRON_SECRET))
       return new Response("unauthorized", { status: 401 });
-    if (u.pathname === "/run") return Response.json(await runOnce(env));
+    if (u.pathname === "/run") {
+      // Don't overlap a scheduled run (they take up to ~50s and fire every minute).
+      const st = await env.SEEN.get("state", "json");
+      if (st?.lastSave && Date.now() - st.lastSave < 60000) return Response.json({ skipped: "a run saved <60s ago; try again shortly" }, { status: 409 });
+      return Response.json(await runOnce(env));
+    }
     const st = (await env.SEEN.get("state", "json")) || { alerts: [] };
     const rs = rows(st);
     if (u.pathname === "/log.csv") return new Response(csv(rs), { headers: { "Content-Type": "text/csv; charset=utf-8" } });

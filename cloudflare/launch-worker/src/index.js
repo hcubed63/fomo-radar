@@ -89,6 +89,14 @@ async function runOnce(env) {
   st.pending = st.pending.filter((p) => !done.has(p.mint));
   if (st.rows.length > MAX_ROWS) st.rows = st.rows.slice(-MAX_ROWS);
   st.lastRun = now;
+  // Merge-on-write so a manual /run overlapping the cron can't drop rows or pending launches.
+  const cur = (await env.STATE.get("state", "json")) || { pending: [], rows: [] };
+  const rowMints = new Set(st.rows.map((r) => r.mint));
+  for (const r of cur.rows || []) if (!rowMints.has(r.mint)) { st.rows.push(r); rowMints.add(r.mint); }
+  const pend = new Set(st.pending.map((p) => p.mint));
+  for (const p of cur.pending || []) if (!pend.has(p.mint) && !rowMints.has(p.mint)) st.pending.push(p);
+  st.rows.sort((a, b) => a.created - b.created);
+  if (st.rows.length > MAX_ROWS) st.rows = st.rows.slice(-MAX_ROWS);
   await env.STATE.put("state", JSON.stringify(st));
   const s = { listOk: Array.isArray(list), fresh: fresh.length, added, evaluated, failed, pending: st.pending.length, rows: st.rows.length };
   console.log(JSON.stringify(s));
@@ -108,7 +116,11 @@ export default {
   async fetch(req, env) {
     const u = new URL(req.url), auth = req.headers.get("Authorization") || "";
     if (!env.CRON_SECRET || (auth !== `Bearer ${env.CRON_SECRET}` && u.searchParams.get("key") !== env.CRON_SECRET)) return new Response("unauthorized", { status: 401 });
-    if (u.pathname === "/run") return Response.json(await runOnce(env));
+    if (u.pathname === "/run") {
+      const cur = await env.STATE.get("state", "json");
+      if (cur?.lastRun && Date.now() - cur.lastRun < 90000) return Response.json({ skipped: "a run happened <90s ago" }, { status: 409 });
+      return Response.json(await runOnce(env));
+    }
     const st = (await env.STATE.get("state", "json")) || { rows: [], pending: [] };
     if (u.pathname === "/launch-log.csv") return new Response(csv(st.rows), { headers: { "Content-Type": "text/csv; charset=utf-8" } });
     if (u.pathname === "/launch-log") {
