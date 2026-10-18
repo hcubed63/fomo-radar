@@ -14,6 +14,8 @@ import { DurableObject } from "cloudflare:workers";
 const H = { Accept: "application/json", "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36", Origin: "https://pump.fun", Referer: "https://pump.fun/" };
 export const CFG = { CROSS: 60, BSR: 2.5, SL: 0.10, TRAIL_AFTER: 0.50, TRAIL: 0.25, HOLD_BUCKETS: 60, MAX_ENTRY_BUCKET: 29, STAKE: 10, FEE: 0.01, PRIO_SOL: 0.0015 };
 const CREATED_PAGES = 8, ACTIVE_PAGES = 4, BUDGET = 46, ENTRY_PAGES = 6, EXIT_PAGES = 4;
+// swap-api (trades) answers 429 when Workers on this account call it often (it is shared with fomo-radar-cron and fomo-radar-launch).
+const SWAP_BUDGET = 6; // shared rate limit: the live alert Worker (fomo-radar-cron) needs swap-api for its dev-sell check
 const SOL_QUOTES = new Set(["11111111111111111111111111111111", "So11111111111111111111111111111111111111112"]);
 const bris = (t) => (t ? new Date(t + 10 * 3600000).toISOString().replace("T", " ").slice(0, 19) : null);
 const nextMinute = () => Math.ceil((Date.now() + 1000) / 60000) * 60000 + 5000; // 5 s after the next minute boundary
@@ -53,12 +55,18 @@ export function stepExit(p, b) {
 
 async function getJson(url, ctr) {
   ctr.n++;
-  try { const r = await fetch(url, { headers: H }); return r.ok ? await r.json() : null; } catch { return null; }
+  try {
+    const r = await fetch(url, { headers: H });
+    if (!r.ok) { const k = (url.includes("swap-api") ? "swap" : "list") + r.status; ctr.codes[k] = (ctr.codes[k] || 0) + 1; return null; }
+    return await r.json();
+  } catch { ctr.codes.err = (ctr.codes.err || 0) + 1; return null; }
 }
 // Trades newest-first pages until a trade older than `untilTs`, or page cap. Returns ascending trades + whether we reached untilTs.
 async function tradesSince(mint, untilTs, pages, ctr) {
   let cur = "0", all = [], reached = false;
   for (let i = 0; i < pages && ctr.n < BUDGET; i++) {
+    if (ctr.swap >= SWAP_BUDGET) return { ok: false, trades: [], reached: false, budget: true };
+    ctr.swap++;
     const j = await getJson(`https://swap-api.pump.fun/v2/coins/${mint}/trades?limit=100&cursor=${cur}&minSolAmount=0`, ctr);
     if (!j || !Array.isArray(j.trades)) return { ok: false, trades: [], reached: false };
     all.push(...j.trades);
@@ -105,17 +113,17 @@ export class PlayTracker extends DurableObject {
   }
 
   async tickInner() {
-    const now = Date.now(), ctr = { n: 0 };
+    const now = Date.now(), ctr = { n: 0, swap: 0, codes: {} };
     if (!this.meta("startedAt")) this.meta("startedAt", now);
     const c = this.meta("counters") || { runs: 0, crossings: 0, filteredOut: 0, entries: 0, skippedCoverage: 0, skippedLate: 0, listFails: 0 };
     c.runs++;
     // 1) Update open positions first (exits matter most).
     const open = this.sql.exec(`SELECT * FROM trades WHERE status='open' ORDER BY entryTs`).toArray();
-    let exitsUpdated = 0;
+    let exitsUpdated = 0, openFails = 0;
     for (const p of open) {
-      if (ctr.n >= BUDGET - 4) break;
+      if (ctr.n >= BUDGET - 4 || ctr.swap >= SWAP_BUDGET) break;
       const r = await tradesSince(p.mint, p.lastTs - 1000, EXIT_PAGES, ctr);
-      if (!r.ok) continue;
+      if (!r.ok) { openFails++; continue; }
       const bs = buckets(r.trades, p.launch);
       const nowBucket = Math.floor((now - p.launch) / 60000);
       let gap = r.reached ? 0 : 1, done = null, k = p.lastBucket + 1;
@@ -148,11 +156,13 @@ export class PlayTracker extends DurableObject {
       if (i === CREATED_PAGES - 1 && pg.length) oldestCreatedAge = Math.round((now - pg[pg.length - 1].created_timestamp) / 60000);
     });
     if (listOk < urls.length) c.listFails += urls.length - listOk;
-    const seen = new Set(this.sql.exec(`SELECT mint FROM seen`).toArray().map((r) => r.mint));
+    const seen = new Map(this.sql.exec(`SELECT mint, status FROM seen`).toArray().map((r) => [r.mint, r.status]));
     const cands = [];
     for (const x of byMint.values()) {
       const age = now - x.created_timestamp;
-      if (seen.has(x.mint) || x.complete || age > (CFG.MAX_ENTRY_BUCKET + 2) * 60000 || age < 60000) continue;
+      const sst = seen.get(x.mint);
+      // 'nocross' = checked from launch, no minute had closed >= 60 SOL yet: re-check only while it trades at/above 60 now.
+      if ((sst && sst !== "nocross") || (sst === "nocross" && (x.market_cap || 0) < CFG.CROSS) || x.complete || age > (CFG.MAX_ENTRY_BUCKET + 2) * 60000 || age < 60000) continue;
       if (String(x.total_supply) !== "1000000000000000" || !(x.quote_mint == null || SOL_QUOTES.has(x.quote_mint))) continue; // standard SOL-curve coins only (backtest excluded mayhem)
       const solPer = x.usd_market_cap && x.market_cap ? x.usd_market_cap / x.market_cap : null;
       const athSol = solPer && x.ath_market_cap ? x.ath_market_cap / solPer : 0;
@@ -160,19 +170,19 @@ export class PlayTracker extends DurableObject {
     }
     cands.sort((a, b) => b.created_timestamp - a.created_timestamp);
     // 3) Evaluate candidates from trades (exact launch-aligned buckets and buy/sell counts).
-    let evaluated = 0, deferred = 0;
+    let evaluated = 0, deferred = 0, fetchFails = 0;
     for (const x of cands) {
-      if (ctr.n >= BUDGET - 1) { deferred++; continue; }
+      if (ctr.n >= BUDGET - 1 || ctr.swap >= SWAP_BUDGET) { deferred++; continue; }
       const launch = x.created_timestamp;
       const r = await tradesSince(x.mint, launch, ENTRY_PAGES, ctr);
-      if (!r.ok) continue;
+      if (!r.ok) { if (++fetchFails >= 3) break; continue; } // likely rate-limited: stop this run, retry next minute
       evaluated++;
       const bs = buckets(r.trades, launch);
       const ks = [...bs.keys()].sort((a, b) => a - b);
       const nowBucket = Math.floor((now - launch) / 60000);
       const j = ks.find((k) => k <= CFG.MAX_ENTRY_BUCKET && k < nowBucket && bs.get(k).c >= CFG.CROSS);
       const mark = (status) => this.sql.exec(`INSERT OR REPLACE INTO seen(mint,ts,status) VALUES(?,?,?)`, x.mint, now, status);
-      if (j === undefined) { if (nowBucket > CFG.MAX_ENTRY_BUCKET + 1 && r.reached) mark("never_crossed"); continue; }
+      if (j === undefined) { if (r.reached) mark(nowBucket > CFG.MAX_ENTRY_BUCKET + 1 ? "never_crossed" : "nocross"); continue; }
       if (!r.reached) { mark("skipped_coverage"); c.skippedCoverage++; continue; } // can't prove this is the first crossing
       c.crossings++;
       let nb = 0, ns = 0; for (let k = Math.max(0, j - 2); k <= j; k++) { const b = bs.get(k); if (b) { nb += b.nb; ns += b.ns; } }
@@ -201,7 +211,7 @@ export class PlayTracker extends DurableObject {
     }
     this.sql.exec(`DELETE FROM seen WHERE ts < ?`, now - 3 * 3600000);
     this.meta("counters", c);
-    const s = { subrequests: ctr.n, listOk, coinsScanned: byMint.size, oldestCreatedAgeMin: oldestCreatedAge, candidates: cands.length, evaluated, deferred, openUpdated: exitsUpdated, open: open.length };
+    const s = { fetchFails, httpErrors: ctr.codes, subrequests: ctr.n, swapCalls: ctr.swap, listOk, coinsScanned: byMint.size, oldestCreatedAgeMin: oldestCreatedAge, candidates: cands.length, evaluated, deferred, openUpdated: exitsUpdated, openFails, open: open.length };
     this.meta("lastRun", { at: now, ...s });
     console.log(JSON.stringify(s));
     return s;
